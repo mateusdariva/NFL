@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="pt">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NFL</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-image: url('https://skycms.s3.amazonaws.com/images/0/nfl-tudo-sobre-o-campeonato.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            color: white;
+        }
+        .container {
+            background-color: rgba(0, 0, 0, 0.7); 
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        .card {
+            margin-top: 20px;
+            background-color: rgba(255, 255, 255, 0.9); 
+        }
+        .card-title {
+            color: #007bff;
+        }
+        .list-group-item {
+            cursor: pointer;
+        }
+        .list-group-item:hover {
+            background-color: rgba(255, 255, 255, 0.6);
+        }
+        .modal-header {
+            background-color: #007bff;
+            color: white;
+        }
+        .modal-body {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body onload="inicio()">
+    <div class="container">
+        <h1 class="text-center">INFORMAÇÕES SOBRE NFL</h1>
+
+        <div class="row">
+            <div class="col-lg-3 col-md-4 col-sm-12">
+                <ul class="list-group" id="ulTeams"></ul>
+            </div>
+            
+            <div class="col-lg-9 col-md-8 col-sm-12">
+                <div id="teamInfo" class="mb-4"></div>
+                <div class="row" id="divScores"></div>
+
+                <div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="logsModalLabel">Logs da API</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <ul id="logList" class="list-group"></ul>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-info mt-3" data-bs-toggle="modal" data-bs-target="#logsModal">Ver Logs</button>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Buscar Treinador</h5>
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="coachIdInput" placeholder="Digite o ID do treinador">
+                            <button class="btn btn-primary" type="button" onclick="buscarTreinador()">Buscar</button>
+                        </div>
+                        <div id="coachInfo"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Buscar Jogador</h5>
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="playerIdInput" placeholder="Digite o ID do jogador">
+                            <button class="btn btn-primary" type="button" onclick="buscarJogador()">Buscar</button>
+                        </div>
+                        <div id="playerInfo"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_KEY = '2065c69c18msh06a4feddf9a5f5cp1c846fjsn89a787a14b05';
+        const BASE_URL = 'https://nfl-api-data.p.rapidapi.com';
+        let teams = [];
+        let logs = []; 
+
+        function inicio() {
+            carregarTimes();
+        }
+
+        async function logOperation(action, status) {
+            const logEntry = { action, status, timestamp: new Date().toISOString() };
+            logs.push(logEntry);
+            displayLogs();
+        }
+
+        function displayLogs() {
+            const logList = document.getElementById('logList');
+            logList.innerHTML = logs.map((log, index) => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${log.timestamp}: ${log.action} - ${log.status}
+                    <button class="btn btn-danger btn-sm" onclick="deleteLog(${index})">Excluir</button>
+                </li>
+            `).join('');
+        }
+
+        function deleteLog(index) {
+            logs.splice(index, 1);
+            displayLogs();
+        }
+
+        async function carregarTimes() {
+            const url = `${BASE_URL}/nfl-team-list`;
+            const options = {
+                method: 'GET',
+                headers: {
+                    'x-rapidapi-key': API_KEY,
+                    'x-rapidapi-host': 'nfl-api-data.p.rapidapi.com'
+                }
+            };
+
+            try {
+                const response = await fetch(url, options);
+                const status = response.ok ? 'Success' : 'Error';
+                await logOperation('Carregar Times', status);
+
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        console.warn("Rate limit exceeded. Waiting for 60 seconds...");
+                        await new Promise(resolve => setTimeout(resolve, 60000));
+                        return carregarTimes(); 
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const result = await response.json();
+                teams = result.teams; 
+                const ul = document.getElementById('ulTeams');
+                const li = teams.map(team => `<li class="list-group-item" onclick="mostrarInformacoes('${team.id}')">${team.name}</li>`).join('');
+                ul.innerHTML = li;
+            } catch (error) {
+                console.error("Error fetching teams:", error);
+            }
+        }
+
+        async function mostrarInformacoes(teamId) {
+            const team = teams.find(t => t.id === teamId);
+            if (team) {
+                const infoDiv = document.getElementById('teamInfo');
+                infoDiv.innerHTML = `
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">${team.name}</h5>
+                            <p><strong>Nickname:</strong> ${team.nickname}</p>
+                            <p><strong>Abbreviation:</strong> ${team.abbreviation}</p>
+                            <p><strong>Color:</strong> ${team.color}</p>
+                            <p><strong>Location:</strong> ${team.location}</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        async function buscarTreinador() {
+            const coachId = document.getElementById('coachIdInput').value.trim();
+            if (!coachId) {
+                alert("Por favor, insira o ID do treinador.");
+                return;
+            }
+
+            const url = `https://nfl-api-data.p.rapidapi.com/nfl-single-coaches?id=${coachId}`;
+            const options = {
+                method: 'GET',
+                headers: {
+                    'x-rapidapi-key': API_KEY,
+                    'x-rapidapi-host': 'nfl-api-data.p.rapidapi.com'
+                }
+            };
+
+            try {
+                const response = await fetch(url, options);
+                const status = response.ok ? 'Success' : 'Error';
+                await logOperation(`Buscar Treinador ID: ${coachId}`, status);
+
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        console.warn("Rate limit exceeded. Waiting for 60 seconds...");
+                        await new Promise(resolve => setTimeout(resolve, 60000));
+                        return buscarTreinador(); 
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const coachInfoDiv = document.getElementById('coachInfo');
+                coachInfoDiv.innerHTML = `
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">${result.firstName} ${result.lastName}</h5>
+                            <p><strong>Data de Nascimento:</strong> ${result.dateOfBirth}</p>
+                            <p><strong>Cidade:</strong> ${result.city}</p>
+                            <p><strong>Estado:</strong> ${result.state}</p>
+                            <p><strong>Link:</strong> <a href="${result.href}" target="_blank">${result.href}</a></p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error("Error fetching coach info:", error);
+            }
+        }
+
+        async function buscarJogador() {
+            const playerId = document.getElementById('playerIdInput').value.trim();
+            if (!playerId) {
+                alert("Por favor, insira o ID do jogador.");
+                return;
+            }
+
+            const url = `https://nfl-api-data.p.rapidapi.com/nfl-ath-fullinfo?id=${playerId}`;
+            const options = {
+                method: 'GET',
+                headers: {
+                    'x-rapidapi-key': API_KEY,
+                    'x-rapidapi-host': 'nfl-api-data.p.rapidapi.com'
+                }
+            };
+
+            try {
+                const response = await fetch(url, options);
+                const status = response.ok ? 'Success' : 'Error';
+                await logOperation(`Buscar Jogador ID: ${playerId}`, status);
+
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        console.warn("Rate limit exceeded. Waiting for 60 seconds...");
+                        await new Promise(resolve => setTimeout(resolve, 60000));
+                        return buscarJogador(); 
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const playerInfoDiv = document.getElementById('playerInfo');
+                playerInfoDiv.innerHTML = `
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">${result.fullName || 'Nome não disponível'}</h5>
+                            <p><strong>Número da Camisa:</strong> ${result.displayJersey || 'Não disponível'}</p>
+                            <p><strong>Idade:</strong> ${result.age || 'Não disponível'}</p>
+                            <p><strong>Data de Nascimento:</strong> ${result.displayDOB || 'Não disponível'}</p>
+                            <p><strong>Peso:</strong> ${result.displayWeight || 'Não disponível'}</p>
+                            <p><strong>Altura:</strong> ${result.displayHeight || 'Não disponível'}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error("Error fetching player info:", error);
+            }
+        }
+    </script>
+</body>
+</html>
